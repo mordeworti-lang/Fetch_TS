@@ -1,116 +1,262 @@
-# Ejercicio: The Universal Data Fetcher
+# Universal Data Fetcher - TypeScript HTTP Client
 
-> **Objetivo:** Construir un sistema genérico en TypeScript para consumir cualquier API REST de forma reutilizable y segura.
-
----
-
-## Contexto
-
-Vas a consumir una API pública. Puedes elegir una de estas:
-
-- **JSONPlaceholder** → `https://jsonplaceholder.typicode.com`
-- **Rick & Morty API** → `https://rickandmortyapi.com/api`
+> **Arquitectura genérica, modular y escalable para consumir APIs REST con TypeScript**
 
 ---
 
-## Parte 1 — La Interfaz `ApiResponse<T>`
+## Características
 
-Crea una interfaz genérica que represente **cualquier respuesta** que pueda devolver tu sistema.
+- **Generics** - Tipado seguro con `ApiResponse<T>`
+- **Path Aliases** - Imports limpios con `@/`
+- **ResponseBuilder** - Patrón builder para construir respuestas consistentes
+- **Manejo de errores** - Diferenciación entre errores HTTP, red, y timeout
+- **Middleware** - Pipeline extensible para interceptar requests
+- **Circuit Breaker** - Protección contra cascadas de fallos
+- **Retry con backoff** - Reintentos exponenciales configurables
+- **Timeout** - Cancelación de requests largos
+- **Métricas** - Tracking de latencia y errores
 
-**Debe contener:**
-- El dato que esperas recibir (puede no existir)
-- El código de estado HTTP
-- Un posible mensaje de error
+---
 
-```ts
-// Pista: usa genéricos (<T>) para que sirva con cualquier tipo de dato
-interface ApiResponse<T> {
-  // ¿Qué campos necesitas aquí?
-}
+## Instalación
+
+```bash
+npm install
+npm test        # Ejecutar tests
+npm run dev     # Ejecutar ejemplos
 ```
 
-> Recuerda que `data` puede ser `null` si algo falla, y `error` puede ser `null` si todo va bien.
-
 ---
 
-## Parte 2 — La Función `fetchData<T>`
+## Arquitectura
 
-Crea una función genérica que reciba una URL y devuelva tu interfaz anterior.
-
-**Requisitos:**
-- Usa `fetch` nativo
-- Envuelve todo en `try/catch`
-- Valida si `response.ok` es `true` antes de parsear el JSON
-- Si `response.ok` es `false`, devuelve el error con el `status` correspondiente
-
-```ts
-async function fetchData<T>(url: string): Promise<ApiResponse<T>> {
-  // Tu implementación aquí
-}
+```
+src/
+├── core/                    # Lógica HTTP genérica
+│   ├── http.client.ts       # fetchData<T> - Cliente básico
+│   ├── advanced.http.client.ts  # Cliente con middleware
+│   ├── retry.handler.ts     # withRetry<T>
+│   ├── timeout.handler.ts   # withTimeout<T>
+│   ├── circuit.breaker.ts   # CircuitBreaker
+│   ├── middleware.chain.ts  # MiddlewareChain
+│   ├── request.executor.ts  # executeRequest
+│   ├── metrics.ts           # MetricsCollector
+│   └── utils.ts             # ResponseBuilder + utilidades
+├── services/
+│   └── api.service.ts       # ApiService<T> - Wrapper de alto nivel
+├── types/                   # Interfaces genéricas
+│   ├── api.types.ts         # ApiResponse<T>, HttpError
+│   ├── advanced.types.ts    # RequestConfig, Middleware, etc.
+│   └── entities.types.ts    # User, Post, Character
+├── config/                  # Endpoints
+└── examples/                # Ejemplos funcionando
 ```
 
-**Preguntas guía:**
-- ¿Qué pasa si el servidor responde con un `404`? ¿`response.ok` es `true` o `false`?
-- ¿Qué diferencia hay entre un error de red y un error HTTP?
-
 ---
 
-## Parte 3 — La Clase `ApiService<T>` (Reto)
+## Uso Básico
 
-Esta es la parte de investigación. Crea una clase genérica que encapsule la lógica de acceso a un recurso específico de la API.
+### fetchData<T> - Cliente genérico
 
-**Debe:**
-1. Recibir el endpoint base en el **constructor**
-2. Tener un método `getAll()` que traiga todos los registros
-3. Tener un método `getOne(id)` que traiga un solo registro por ID
+```typescript
+import { fetchData } from '@/core';
 
-```ts
-class ApiService<T> {
-  // ¿Cómo defines el constructor para recibir el endpoint?
-
-  async getAll(): Promise<ApiResponse<T[]>> {
-    // Usa tu función fetchData aquí
-  }
-
-  async getOne(id: number): Promise<ApiResponse<T>> {
-    // ¿Cómo construyes la URL con el id?
-  }
-}
-```
-
-**Preguntas guía:**
-- ¿Cómo concatenas el `id` al `endpoint` base?
-- ¿Puedes reutilizar `fetchData` dentro de la clase?
-
----
-
-## Parte 4 — Ponlo a prueba
-
-Define al menos **dos tipos** de datos (puedes inventarlos o tomarlos de la API elegida) y crea instancias de `ApiService` para cada uno.
-
-```ts
-// Ejemplo de estructura (no es la respuesta, solo la forma)
-type Usuario = {
+interface User {
   id: number;
   name: string;
-  // ...
-};
+}
 
-// Crea el servicio y llama a sus métodos
-const usuarioService = new ApiService<Usuario>('...');
+const response = await fetchData<User[]>('https://api.example.com/users');
+
+if (response.error) {
+  console.error(`Error ${response.status}: ${response.error}`);
+} else {
+  console.log(response.data); // User[]
+}
 ```
 
-**¿Qué debes verificar?**
-- Que `getAll()` retorna un arreglo de datos
-- Que `getOne(1)` retorna un solo objeto
-- Que si usas un ID inválido (ej: `99999`), el error se maneja correctamente
+### ApiService<T> - Servicio de alto nivel
+
+```typescript
+import { ApiService } from '@/services';
+
+interface Post {
+  id: number;
+  title: string;
+  body: string;
+}
+
+const postService = new ApiService<Post>('https://api.example.com/posts');
+
+// Obtener todos
+const all = await postService.getAll();
+
+// Obtener uno
+const one = await postService.getOne(1);
+
+// Con features avanzadas
+const advancedService = new ApiService<Post>(
+  'https://api.example.com/posts',
+  { useAdvanced: true, timeout: 5000, retries: 3 }
+);
+```
 
 ---
 
-## Links útiles
+## Patrón ResponseBuilder
 
-- [JSONPlaceholder Docs](https://jsonplaceholder.typicode.com/)
-- [Rick & Morty API Docs](https://rickandmortyapi.com/documentation)
-- [TypeScript Generics](https://www.typescriptlang.org/docs/handbook/2/generics.html)
-- [MDN — Fetch API](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch)
-- [MDN — Response.ok](https://developer.mozilla.org/en-US/docs/Web/API/Response/ok)
+Clase genérica para construir respuestas consistentes:
+
+```typescript
+import { ResponseBuilder } from '@/core';
+
+// Éxito
+const success = ResponseBuilder.success<User>(userData, 200);
+
+// Errores tipados
+const httpError = ResponseBuilder.httpError<User>(404, 'Not Found');
+const networkError = ResponseBuilder.networkError<User>();
+const timeoutError = ResponseBuilder.timeoutError<User>(5000);
+```
+
+**Métodos disponibles:**
+- `success<T>(data, status)` - Respuesta exitosa
+- `error<T>(message, status)` - Error genérico
+- `networkError<T>()` - Error de conexión
+- `timeoutError<T>(ms)` - Timeout
+- `httpError<T>(status, text)` - Error HTTP
+- `maxRetriesExceeded<T>()` - Máximos reintentos
+- `parseError<T>(status)` - Error parseando JSON
+- `emptyBody<T>(status)` - Body vacío
+
+---
+
+## ApiResponse<T>
+
+Interfaz genérica para todas las respuestas:
+
+```typescript
+interface ApiResponse<T> {
+  data: T | null;      // Datos o null si hay error
+  error: string | null; // Mensaje de error o null si éxito
+  status: number;      // Código HTTP
+}
+```
+
+**Ejemplos de estado:**
+- Éxito: `{ data: [...], error: null, status: 200 }`
+- HTTP 404: `{ data: null, error: 'HTTP 404: Not Found', status: 404 }`
+- Network: `{ data: null, error: 'Network error...', status: 0 }`
+
+---
+
+## Diseño Genérico
+
+### Principios aplicados
+
+1. **DRY (Don't Repeat Yourself)**
+   - `ResponseBuilder` elimina duplicación de creación de respuestas
+   - Un único lugar para cada tipo de error
+
+2. **Open/Closed**
+   - Extensible via middleware sin modificar core
+   - Nuevos handlers se añaden sin tocar código existente
+
+3. **Single Responsibility**
+   - `retry.handler.ts` - Solo reintentos
+   - `timeout.handler.ts` - Solo timeouts
+   - `circuit.breaker.ts` - Solo circuit breaker
+
+4. **Composition over Inheritance**
+   - `AdvancedHttpClient` compone: retry + timeout + circuit breaker
+   - Cada feature es independiente y testeable
+
+### Flujo de request
+
+```
+ApiService.getOne(id)
+  → AdvancedHttpClient.get()
+    → withRetry()
+      → withTimeout()
+        → executeRequest()
+          → fetch()
+```
+
+---
+
+## Tests
+
+Cobertura completa con 17 tests:
+
+```bash
+npm test
+
+✓ tests/http.client.test.ts (4 tests)
+✓ tests/api.service.test.ts (3 tests)
+✓ tests/retry.handler.test.ts (3 tests)
+✓ tests/circuit.breaker.test.ts (4 tests)
+✓ tests/metrics.test.ts (3 tests)
+```
+
+---
+
+## APIs de ejemplo implementadas
+
+### JSONPlaceholder
+```typescript
+const userService = new ApiService<User>(
+  'https://jsonplaceholder.typicode.com/users'
+);
+const users = await userService.getAll(); // 10 usuarios
+```
+
+### Rick & Morty API
+```typescript
+const charService = new ApiService<Character>(
+  'https://rickandmortyapi.com/api/character'
+);
+const rick = await charService.getOne(1); // Rick Sanchez
+```
+
+---
+
+## Configuración de Path Aliases
+
+`tsconfig.json`:
+```json
+{
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["src/*"],
+      "@/types": ["src/types/index"],
+      "@/core": ["src/core/index"],
+      "@/services": ["src/services/index"]
+    }
+  }
+}
+```
+
+`vitest.config.ts`:
+```typescript
+resolve: {
+  alias: {
+    '@': path.resolve(__dirname, './src')
+  }
+}
+```
+
+---
+
+## Scripts disponibles
+
+| Comando | Descripción |
+|---------|-------------|
+| `npm test` | Ejecutar todos los tests |
+| `npm run test:watch` | Tests en modo watch |
+| `npm run dev` | Ejecutar ejemplos |
+
+---
+
+## Licencia
+
+ISC

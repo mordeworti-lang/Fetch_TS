@@ -4,10 +4,21 @@
     "moduleResolution": "Bundler",
     "verbatimModuleSyntax": false,
     "target": "esnext",
-    "rootDir": "./src",
+    "rootDir": ".",
     "outDir": "./dist",
     "strict": true,
     "esModuleInterop": true,
-    "skipLibCheck": true
-  }
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "types": ["vitest/globals", "node"],
+    "paths": {
+      "@/*": ["src/*"],
+      "@/types": ["src/types/index"],
+      "@/core": ["src/core/index"],
+      "@/services": ["src/services/index"],
+      "@/config": ["src/config/index"],
+      "@/examples": ["src/examples/index"]
+    }
+  },
+  "include": ["src/**/*", "tests/**/*", "vitest.config.ts"]
 }
